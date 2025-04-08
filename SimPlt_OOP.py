@@ -22,8 +22,7 @@ class FlightSimulation():
     def flightData(self):
         self.x = 100
         self.y = 50
-        self.z = 100
-        self.alpha = 0       
+        self.z = 100    
         self.u = 100
         self.v = 0
         self.w = 0
@@ -46,15 +45,19 @@ class FlightSimulation():
             theta = d2r(-self.theta) 
             phi = d2r(self.phi)
             psi = d2r(self.psi)
+            gamma = d2r(math.atan2(self.w, self.u))
 
+
+            alpha = theta - gamma
+            V = math.sqrt(pow(self.u)+pow(self.v)+pow(self.w,))
+            beta = math.asin(self.v,V)
 
             #x = self.x + dt*(self.u*math.cos(psi)*math.cos(theta) - self.v*math.sin(psi) + self.w* math.cos(theta))
-            self.x = self.x + dt * (self.u * math.cos(psi) * math.cos(theta) - self.v * math.sin(psi) + self.w * math.sin(theta))# + dt * self.x_advance
-            self.y = self.y + dt * (self.u * math.sin(psi) * math.cos(theta) + self.v * math.cos(psi)) #+ dt * self.y_advance
-            self.z = self.z + dt * (-self.u * math.sin(theta) + self.w *math.cos(theta)) # dt * self.z_advance
+            self.x = self.x + dt * (self.u * math.cos(psi) * math.cos(theta) + self.v * (math.sin(phi) * math.sin(psi) * math.cos(psi)) + self.w * (math.cos(phi) * math.sin(theta) * math.cos(psi) + math.sin(phi)*math.sin(psi)))# + dt * self.x_advance
+            self.y = self.y + dt * (self.u * math.sin(psi) * math.cos(theta) + self.v * (math.cos(psi) * math.sin(theta) * math.sin(phi)) + self.w * (math.cos(phi) * math.sin(theta) * math.sin(psi) - math.sin(phi)* math.cos(psi))) #+ dt * self.y_advance
+            self.z = self.z + dt * (-self.u * math.sin(theta) + self.v * math.cos(theta)* math.sin(phi) * self.w * math.cos(theta)* math.cos(phi)) # dt * self.z_advance
             
             
-            alpha = math.atan2(self.w, self.u) # radianos
                
             self.x_values.append(self.x) #replace
             self.y_values.append(self.y) #replace
@@ -75,9 +78,9 @@ class FlightSimulation():
 
         # Configuração dos rótulos
         ax.set_title(f'Trajetória em tempo real')
-        ax.set_xlabel('X ')# '''+ str(theta)''')
-        ax.set_ylabel('Y ')# '''+ str(psi)''')
-        ax.set_zlabel('Z ')# ''' + str(phi)''')
+        ax.set_xlabel('Y ' + 'Pitch')
+        ax.set_ylabel('X ' + 'Roll')
+        ax.set_zlabel('Z ' + 'Yaw')
         ax.legend()
 
         plt.pause(0.01)  # Pequena pausa para atualizar a animação
