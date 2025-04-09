@@ -26,9 +26,16 @@ class FlightSimulation():
         self.u = 100
         self.v = 0
         self.w = 0
+        self.m = 0 #Massa kg
+        self.ib = 0
+        self.jb = 0
+        self.kb = 0
         self.theta = 5
         self.phi = 0
         self.psi = 0
+        self.p = 0
+        self.q = 0
+        self.r = 0
         self.xlim, self.ylim, self.zlim = 1300, 1300, 300  # Ajuste conforme necessário
         self.x_advance = 0
         self.y_advance = 0
@@ -36,6 +43,7 @@ class FlightSimulation():
         self.x_values = []
         self.y_values = []
         self.z_values = []
+        
      
 
     def flightMechannics(self):
@@ -47,6 +55,30 @@ class FlightSimulation():
             psi = d2r(self.psi)
             gamma = d2r(math.atan2(self.w, self.u))
 
+            i2 = self.ib
+            k1 = -math.cos(theta)*self.ib + math.cos(theta)*math.sin(phi)*self.jb + math.cos(phi) * math.cos(theta)*self.kb
+            j2 = math.cos(phi)*self.jb - math.sin(phi)*self.kb
+
+            p = (phi_dot - psi_dot*math.sin(theta))
+            q = (theta_dot*math.cos(phi )+ phi_dot*math.cos(phi)*math.sin(phi))
+            r = (psi_dot*math.cos(phi)*math.cos(theta)- theta_dot*math.sin(phi))
+
+            phi_dot = p + q*math.sin(phi)*math.tan(theta) + r*math.cos(phi)*math.tan(theta)
+            theta_dot = q*math.cos(phi) - r*math.sin(phi)
+            psi_dot = (q*math.sin(phi) + r*math.cos(phi))/math.cos(theta)
+
+            u_dot = r*self.v - q*self.w+ TransMotion(1)/self.m
+            v_dot = p*self.p - r*self.u + TransMotion(2)/self.m
+            w_dot = q*self.u - p*self.v + TransMotion(3)/self.m
+
+            X_dot = [u_dot, v_dot, w_dot]
+            X_matrix = [self.u, self.v, self.w]
+            #omega = self.ib*p + self.jb*q + self.kb*r
+            
+            
+            omega = [p,q,r]
+
+            TransMotion = self.m * (X_dot + np.cross(omega, X_matrix))
 
             alpha = theta - gamma
             V = math.sqrt(pow(self.u)+pow(self.v)+pow(self.w,))
