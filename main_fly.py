@@ -7,6 +7,10 @@ import pygame # Importar pygame para o loop de eventos
 from cessna172p_config import CESSNA_172P
 from joystick_controller import JoystickController
 from instrumentsPanel import VirtualPanel # <-- IMPORTAÇÃO DO PAINEL
+from engine_forces import EngineDynamics
+from atmosphere_model import AtmosphereModel
+from LandingGearDyna import LandingGearDynamics
+from ActuatorDynamics import ActuatorDynamics
 
 # Altere invert_y para True se o nariz do avião subir quando empurrar o manche para a frente
 joystick_ctrl = JoystickController(invert_y=True, invert_z=True, invert_throttle=True) # Inverte o eixo de yaw para que guinar à direita seja positivo
@@ -28,6 +32,10 @@ alt_inicial = 1500.0 # Metros
 # Instanciar a Estrutura Binária do FG e o Motor Físico
 fdm = FGNetFDM()
 sim = RigidBody6DOF(lat_inicial, lon_inicial, alt_inicial)
+engine = EngineDynamics(max_thrust=CESSNA_172P["max_thrust"])
+atm = AtmosphereModel(wind_speed_knots=10.0, wind_dir_deg=90.0, turbulence_intensity=0.3)
+gear = LandingGearDynamics()
+actuators = ActuatorDynamics(tau_aileron=0.15, tau_elevator=0.2, tau_rudder=0.25)
 
 # Inicializar a janela do Painel Virtual
 painel = VirtualPanel() # <-- INICIALIZAÇÃO DO PAINEL
@@ -41,10 +49,19 @@ sim.AR = (sim.wing_span**2) / sim.wing_area
 sim.Ixx = CESSNA_172P["ixx"]
 sim.Iyy = CESSNA_172P["iyy"]
 sim.Izz = CESSNA_172P["izz"]
-sim.C_D0 = CESSNA_172P["cd0"]
-sim.C_L_alpha = CESSNA_172P["cl_alpha"]
-sim.C_L0 = CESSNA_172P["cl0"]
-sim.e = CESSNA_172P["oswald_eff"]
+sim.C_D0 = CESSNA_172P["C_D0"]
+sim.C_L_alpha = CESSNA_172P["C_L_alpha"]
+sim.C_L0 = CESSNA_172P["C_L0"]
+sim.e = CESSNA_172P["e"]
+sim.C_m0 = CESSNA_172P["C_m0"]
+sim.C_m_alpha = CESSNA_172P["C_m_alpha"]
+sim.C_m_q = CESSNA_172P["C_m_q"]
+sim.C_m_de = CESSNA_172P["C_m_de"]
+sim.C_l_p = CESSNA_172P["C_l_p"]
+sim.C_l_da = CESSNA_172P["C_l_da"]
+sim.C_n_beta = CESSNA_172P["C_n_beta"]
+sim.C_n_r = CESSNA_172P["C_n_r"]
+sim.C_n_dr = CESSNA_172P["C_n_dr"]
 
 print(f"A iniciar simulação 6DOF a {HZ}Hz...")
 
@@ -59,34 +76,67 @@ try:
             joystick_ctrl.handle_event(event)
 
         empuxo = 0.0  # Newtons
-        cmd_roll = 0.0  # Comando positivo = rolar para a direita
-        cmd_pitch = 0.0 # Comando positivo = nariz para cima
-        cmd_yaw = 0.0   # Comando positivo = guinar para a direita        
+        target_roll = 0.0  # Comando positivo = rolar para a direita
+        target_pitch = 0.0 # Comando positivo = nariz para cima
+        target_yaw = 0.0   # Comando positivo = guinar para a direita        
+        flap_setting = 0.0 # Comando de flaps (0.0 a 1.0)
         
         # COMANDOS DA SIMULAÇÃO (Hardware-in-the-loop via Joystick ou fallback)
         if joystick_ctrl.is_connected():
             throttle_input, roll_input, pitch_input, yaw_input = joystick_ctrl.get_controls()
-            empuxo = throttle_input * CESSNA_172P["max_thrust"] # Mapeia 0-1 para 0-max_thrust
             
             # Comandos em radianos para a física (baseados nos limites reais da aeronave)
-            cmd_roll = roll_input * math.radians(CESSNA_172P["limits"]["aileron"])
-            cmd_pitch = pitch_input * math.radians(CESSNA_172P["limits"]["elevator"])
-            cmd_yaw = yaw_input * math.radians(CESSNA_172P["limits"]["rudder"])
+            target_roll = roll_input * math.radians(CESSNA_172P["limits"]["aileron"])
+            target_pitch = pitch_input * math.radians(CESSNA_172P["limits"]["elevator"])
+            target_yaw = yaw_input * math.radians(CESSNA_172P["limits"]["rudder"])
             
-            # Valores normalizados (-1 a 1) para a visualização no FlightGear
-            surf_aileron, surf_elevator, surf_rudder = roll_input, pitch_input, yaw_input
-
         else:
             # Fallback para valores padrão ou para um voo "autônomo" simples
-            empuxo = CESSNA_172P["max_thrust"] * 0.7 # 70% de empuxo para manter sustentação
-            cmd_roll = 0.0 # Sem roll
-            cmd_pitch = 0.0 # Sem pitch
-            cmd_yaw = 0.0 # Sem yaw
-            surf_aileron = surf_elevator = surf_rudder = 0.0
-        # ---------------------------------------------------------
+            throttle_input = 0.7 # 70% de empuxo para manter sustentação
+            target_roll = 0.0 # Sem roll
+            target_pitch = 0.0 # Sem pitch
+            target_yaw = 0.0 # Sem yaw
 
-        # Avança a física em 1 timestep (dt)
-        sim.update(DT, empuxo, cmd_roll, cmd_pitch, cmd_yaw)
+        # Passar os comandos pelo filtro passa-baixo dos atuadores
+        cmd_roll, cmd_pitch, cmd_yaw = actuators.update(target_roll, target_pitch, target_yaw, DT)
+
+        # Valores normalizados (-1 a 1) para a visualização no FlightGear baseados nos comandos filtrados
+        surf_aileron = cmd_roll / math.radians(CESSNA_172P["limits"]["aileron"])
+        surf_elevator = cmd_pitch / math.radians(CESSNA_172P["limits"]["elevator"])
+        surf_rudder = cmd_yaw / math.radians(CESSNA_172P["limits"]["rudder"])
+        # ---------------------------------------------------------
+        
+        u, v, w = sim.state[0], sim.state[1], sim.state[2]
+        p, q, r = sim.state[3], sim.state[4], sim.state[5]
+        phi, theta, psi = sim.phi, sim.theta, sim.psi
+
+        # Vento no eixo do corpo (calculado com estado antes do update para estimar forcas do motor)
+        wind_u, wind_v, wind_w = atm.get_wind_body(DT, phi, theta, psi)
+        
+        air_u = u - wind_u
+        air_v = v - wind_v
+        air_w = w - wind_w
+        
+        v_air = math.sqrt(air_u**2 + air_v**2 + air_w**2)
+        tas_knots = v_air * 1.94384
+        alpha_rad = math.atan2(air_w, air_u) if air_u != 0 else 0.0
+
+        # Forças do Motor
+        thrust, torque, p_factor = engine.calculate(throttle_input, sim.alt, tas_knots, alpha_rad)
+
+        # Forças do Trem de Pouso (Solo)
+        # brakes_applied pode ser associado a um input do joystick futuramente
+        brakes_applied = 0.0
+
+        # Avança a física em 1 timestep (dt), repassando gear para o RK4
+        sim.update(
+            DT, wind_u, wind_v, wind_w, 
+            thrust, torque, p_factor, 
+            cmd_roll, cmd_pitch, cmd_yaw, 
+            flap_setting, 
+            gear_model=gear, 
+            brakes_applied=brakes_applied
+        )
 
         # Mapeamento do Estado Físico para a Estrutura Binária do FlightGear
         fdm.latitude = sim.lat
@@ -95,12 +145,16 @@ try:
         fdm.phi = sim.phi
         fdm.theta = sim.theta
         fdm.psi = sim.psi
-        phi, theta, psi = sim.phi, sim.theta, sim.psi
 
-        # Extrair velocidades e taxas para o FlightGear (conversão de unidades)
+        # Extrair velocidades e taxas pós-update
         u, v, w = sim.state[0], sim.state[1], sim.state[2]
         p, q, r = sim.state[3], sim.state[4], sim.state[5]
-        v_air = math.sqrt(u**2 + v**2 + w**2)
+        
+        # Recalcular v_air pós-update para os instrumentos (usando os mesmos wind_u,v,w para simplificar)
+        air_u = u - wind_u
+        air_v = v - wind_v
+        air_w = w - wind_w
+        v_air = math.sqrt(air_u**2 + air_v**2 + air_w**2)
         
         # --- CÁLCULOS PARA O PAINEL VIRTUAL ---
         # True Airspeed (TAS) - Velocidade real em relação à massa de ar
@@ -124,8 +178,8 @@ try:
         fdm.v_body_u = u * 3.28084      # m/s para ft/s
         fdm.v_body_v = v * 3.28084
         fdm.v_body_w = w * 3.28084
-        fdm.alpha = math.atan2(w, u) if u != 0 else 0.0
-        fdm.beta = math.asin(v / v_air) if v_air > 0.1 else 0.0
+        fdm.alpha = math.atan2(air_w, air_u) if air_u != 0 else 0.0
+        fdm.beta = math.asin(air_v / v_air) if v_air > 0.1 else 0.0
 
         # Velocidades locais e Taxa de Subida (Climb Rate)
         v_down = -u * math.sin(theta) + v * math.sin(phi)*math.cos(theta) + w * math.cos(phi)*math.cos(theta)

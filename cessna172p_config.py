@@ -25,10 +25,23 @@ CESSNA_172P = {
     "rpm_max": 2700.0,            # RPM Máxima
 
     # --- Coeficientes Aerodinâmicos (Adimensionais) ---
-    "cd0": 0.0310,                # Parasitic Drag (Arrasto parasita com flaps recolhidos)
-    "cl_alpha": 4.58,             # Lift Slope (Gradiente de sustentação por radiano)
-    "cl0": 0.31,                  # Coeficiente de sustentação com ângulo de ataque zero
-    "oswald_eff": 0.8,            # Fator de eficiência de Oswald (e)
+    # Coeficientes Aerodinâmicos Linearizados (Adimensionais)
+    "C_L0": 0.28,                   # Sustentação com alfa zero
+    "C_L_alpha": 4.58,          # Gradiente de sustentação por radiano de alfa
+    "C_D0": 0.03,               # Arrasto parasita
+    "e": 0.8,                   # Fator de eficiência de Oswald
+
+    # Derivadas de Estabilidade e Controle
+    "C_m0": -0.02,              # Momento de arfagem base
+    "C_m_alpha": -0.89,         # Estabilidade longitudinal
+    "C_m_q": -12.4,             # Amortecimento de arfagem
+    "C_m_de": -1.28,            # Eficiência do profundor
+    "C_l_p": -0.47,             # Amortecimento de rolagem
+    "C_l_da": 0.17,             # Eficiência do aileron
+    
+    "C_n_beta": 0.071,          # Estabilidade direcional (Weathercock)
+    "C_n_r": -0.15,             # Amortecimento de guinada
+    "C_n_dr": -0.074,           # Eficiência do leme
     
     # --- Limites Operacionais ---
     "v_ne": 158.0,                # Velocity Never Exceed (Nós) - 293 km/h
@@ -44,7 +57,9 @@ CESSNA_172P = {
         "flaps": 30.0             # Extensão total (30°)
     },
 
-    # Unidades de conversão úteis para a simulação
     "units": "SI (Meters, Kilograms, Seconds)",
     "reference_datum": "Firewall / Centerline"
+
+
+    
 }
